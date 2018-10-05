@@ -1,10 +1,11 @@
 from termcolor import colored
-import numpy as np
-
+from random import randint
+from random import choice
+import ast
 
 class Type:
     def __init__(self, type): # FIRE WATER LEAF NORMAL
-        self.type = type
+        self.typeName = type
         if type == 'FIRE':
             self.weakness = 'WATER'
             self.strong = 'LEAF'
@@ -22,7 +23,7 @@ class Type:
             exit(1)
 
     def __str__(self):
-        return self.type
+        return self.typeName
 
 
 class Attack:
@@ -34,9 +35,11 @@ class Attack:
 
     def get_damage(self, opponentType):
         damage_taken = self.attackDamage
-        accuracy_chance = np.random.randint(0, 101)
+        accuracy_chance = randint(0, 101)
         if accuracy_chance > self.attackAccuracy:
             return 0
+        if accuracy_chance > 95:
+            damage_taken *= 1.25
         if opponentType == self.attackType.strong:
             damage_taken = 2*self.attackDamage
         if opponentType == self.attackType.weakness:
@@ -51,12 +54,29 @@ class Attack:
 
 
 class Object:
-    def __init__(self, type, health, name):
+    def __init__(self, type, health, name, level=1):
         self.type = Type(type)
-        self.moveList = [Attack("tackle", "NORMAL", 100, 5)] # default move is tackle
-        self.health = health
+        self.moveList = [Attack("Tackle", "NORMAL", 100, 5)] # default move is tackle
+        self.currentHealth = health
+        self.maxHealth = health
         self.isAlive = True
         self.name = name
+        self.level = level
+
+    def level_up(self):
+        self.level += 1
+        self.maxHealth += 10
+        self.currentHealth = self.maxHealth
+        if self.level % self.level == 0:
+            global types_moves
+            move = None
+            while move in self.moveList:
+                which_type = randint(0, 2)  # 0 - normal move, 1 - type move
+                if which_type == 1:
+                    move = choice(types_moves[self.type.typeName])
+                else:
+                    move = choice(types_moves["NORMAL"])
+            self.moveList.append(move)
 
     def do_damage(self, move_name, opponent):
         for attack in self.moveList:
@@ -69,8 +89,8 @@ class Object:
         return False
 
     def take_damage(self, amount):
-        self.health -= amount
-        if self.health <= 0:
+        self.currentHealth -= amount
+        if self.currentHealth <= 0:
             self.isAlive = False
 
     @classmethod
@@ -87,14 +107,31 @@ class Enemy(Object):
     def __init__(self, health, element, name):
         super(Enemy, self).__init__(element, health, name)
 
+    def do_damage(self, opponent):
+        attack = choice(self.moveList)
+        attack_damage = attack.get_damage(opponent.type)
+        print(self.name + " used " + colored(attack.attackName, 'green')
+              + ". It did " + colored(str(attack_damage)+'\n', 'red'))
+        opponent.take_damage(attack_damage)
+        return False
+
 
 def display_health(player, enemy):
-    print(colored("Enemy: "+str(enemy.name)+"\nHealth: "+str(enemy.health)+'\n', 'red'))
-    print(colored("You: "+str(player.name)+"\nHealth: "+str(player.health), 'blue'))
+    print(colored("Enemy: "+str(enemy.name)+ " Level: " + str(enemy.level)+"\nHealth: "+str(enemy.currentHealth)+'\n', 'red'))
+    print(colored("You: "+str(player.name)+ " Level: " + str(player.level)+"\nHealth: "+str(player.currentHealth)+'\n', 'blue'))
 
+
+types_moves = {"FIRE": [Attack("Fireball", "FIRE", 100, 8)],
+               "WATER": [Attack("Water Gun", "WATER", 100, 8)],
+               "LEAF": [Attack("Razor Leaf", "LEAF", 100, 8)],
+               "NORMAL": [Attack("Slam", "NORMAL", 100, 6.5)]}
+
+# with open('Moves.txt', 'r') as f:
+#     s = f.read()
+#     type_moves = ast.literal_eval(s)
 
 if __name__ == "__main__":
-    base_health = 50
+    base_health = 10
     player_name = input("What is your name?")
     starting_health = input("How much health would you like to start off with?")
     player_health = base_health
@@ -107,9 +144,10 @@ if __name__ == "__main__":
                 break
         except ValueError:
             starting_health = input("Invalid. Please try again.\nHealth must be an integer and below 250")
-    player_type = input("Enter your type(FIRE, WATER, LEAF, NORMAL):")
-    player = Player(player_health, player_type,player_name) # make an array of objects later
-    enemy = Enemy(base_health, "NORMAL", "Enemy One")
+    player_type = input("Enter your type(FIRE, WATER, LEAF, NORMAL):").upper()
+    player = Player(player_health, player_type, player_name) # make an array of objects later
+    stage = 1
+    enemy = Enemy(base_health, choice(list(types_moves)), "Enemy "+str(stage))
     gameNotOver = True
     while gameNotOver:
         display_health(player, enemy)
@@ -118,11 +156,14 @@ if __name__ == "__main__":
         while not player.do_damage(move, enemy):
             move = input("Invalid move.\nChoose a move to attack with (Type its name)")
         display_health(player, enemy)
-        enemy.do_damage("tackle", player)
+        enemy.do_damage(player)
+        if stage == 4:
+            break
         if not enemy.isAlive:
             display_health(player, enemy)
-            gameNotOver = False
-            print("You Won")
+            player.level_up()
+            base_health += 5
+            enemy = Enemy(base_health, choice(list(types_moves)), "Enemy "+str(stage))
         if not player.isAlive:
             display_health(player, enemy)
             gameNotOver = False
